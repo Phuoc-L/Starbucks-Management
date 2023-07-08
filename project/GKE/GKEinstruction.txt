@@ -1,0 +1,84 @@
+
+1. Push api and cashier to dockerhub:
+    make sure to make clean and make build both apps
+
+    docker login
+	docker build -t phuocl/spring-starbucks-api:v1.0 .
+	docker push phuocl/spring-starbucks-api:v1.0
+
+	docker login
+	docker build -t phuocl/spring-cashier:v1.0 .
+	docker push phuocl/spring-cashier:v1.0
+
+2. On GKE connect cluster to terminal:
+    run jumpbox: kubectl create -f jumpbox.yaml
+                    kubectl exec  -it jumpbox -- /bin/bash
+                    apt-get update
+                    apt-get install curl -y
+                    apt-get install mysql-client -y
+
+3. Get private ip of cloudsql and input it in mysql_host for deployment yaml for api and cashier
+
+4. Go to databases in the cloudsql instance, and create starbucks 
+    Go to users, create admin, pass welcome
+    in jumpbox: kubectl exec  -it jumpbox -- /bin/bash
+        mysql -u admin -p -h <ip address>
+        use starbucks;
+        
+5. Run api deployment yaml
+    kubectl create -f api-deployment.yaml 
+        check for correct tables in mysql jumpbox
+    kubectl create -f api-service.yaml
+        test service: curl http://spring-starbucks-api-service:8080/ping
+
+6. Run kong
+    kubectl apply -f https://bit.ly/k4k8s
+
+    export KONG=<kong-public-ip>
+    
+    Test kong:
+        echo $KONG
+        curl -i $KONG
+            {"message":"no Route matched with those values"}
+
+    kubectl apply -f kong-ingress-rule.yaml
+    kubectl apply -f kong-strip-path.yaml
+    kubectl patch ingress starbucks-api -p '{"metadata":{"annotations":{"konghq.com/override":"kong-strip-path"}}}'
+    Test Kong again (should work)
+        curl $KONG/api/ping
+
+    kubectl apply -f kong-key-auth.yaml
+    kubectl patch service spring-starbucks-api-service -p '{"metadata":{"annotations":{"konghq.com/plugins":"kong-key-auth"}}}'
+    kubectl apply -f kong-consumer.yaml
+
+    Paste the whole thing:
+        kubectl create secret generic apikey  \
+        --from-literal=kongCredType=key-auth  \
+        --from-literal=key=2H3fONTa8ugl1IcVS7CjLPnPIS2Hp9dJ
+
+    kubectl apply -f kong-credentials.yaml
+    Test kong:
+        echo $KONG
+        curl $KONG/api/ping
+        curl $KONG/api/ping --header 'apikey: 2H3fONTa8ugl1IcVS7CjLPnPIS2Hp9dJ'
+
+7. Run cashier application
+    kubectl create -f cashier-deployment.yaml
+        check for correct tables in mysql jumpbox
+    kubectl create -f cashier-service.yaml
+        test service: curl -v http://spring-cashier-service:9090
+    kubectl apply -f cashier-ingress.yaml
+        change health check path to /about
+
+
+
+Demo Reference:
+
+kubectl exec  -it jumpbox -- /bin/bash
+apt-get update
+apt-get install curl -y
+apt-get install mysql-client -y
+
+mysql -u admin -p -h 10.26.80.7
+
+curl 35.184.213.215/api/ping --header 'apikey: 2H3fONTa8ugl1IcVS7CjLPnPIS2Hp9dJ'

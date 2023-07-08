@@ -1,0 +1,25 @@
+
+version: "3"
+
+services:    
+  cashier:
+    image: spring-cashier
+    volumes:
+      - /tmp:/tmp
+    networks:
+      - network   
+    ports:
+      - "9090:9090"
+    environment:
+      API_KEY: "2H3fONTa8ugl1IcVS7CjLPnPIS2Hp9dJ"      
+      API_HOST: "kong:8000/api" 
+    restart: always     
+  
+volumes:
+  schemas:
+    external: false
+
+networks:
+  network:
+    driver: bridge
+
